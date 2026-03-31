@@ -6,30 +6,37 @@
     <title>Creole '26 Scorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .active-nav { @apply bg-slate-900 text-white shadow-lg scale-105; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 pb-28">
+    <div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl relative">
+        <div class="flex flex-col items-center justify-center h-screen gap-4">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-900"></div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading Creole '26...</p>
+        </div>
+    </div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // Global config provided by environment
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'creole-2026-v3';
+        // --- FIREBASE CONFIG ---
+        // If you want live sync across 12 phones, paste your firebaseConfig object here.
+        // Otherwise, it will save locally to each user's phone.
+        const firebaseConfig = null; 
 
-        const INITIAL_DATA = {
+        const DATA = {
             course: {
-                day1: { 
-                    name: "Prestonwood (Fairways)", 
-                    pars: [4,3,5,4,3,4,3,4,4, 5,4,3,5,4,3,4,4,4], 
-                    hcps: [12,16,8,2,10,4,18,14,6, 7,5,17,9,11,15,13,3,1] 
-                },
-                day2: { 
-                    name: "Treyburn CC", 
-                    pars: [4,3,4,5,4,4,3,4,5, 4,5,4,3,4,5,4,3,4], 
-                    hcps: [13,17,1,5,3,11,15,7,9, 14,12,6,18,2,4,10,16,8] 
-                }
+                day1: { name: "Prestonwood (Fairways)", pars: [4,3,5,4,3,4,3,4,4, 5,4,3,5,4,3,4,4,4], hcps: [12,16,8,2,10,4,18,14,6, 7,5,17,9,11,15,13,3,1] },
+                day2: { name: "Treyburn CC", pars: [4,3,4,5,4,4,3,4,5, 4,5,4,3,4,5,4,3,4], hcps: [13,17,1,5,3,11,15,7,9, 14,12,6,18,2,4,10,16,8] }
             },
             matches: {
                 day1: [
@@ -46,260 +53,217 @@
                     { id: "d2m6", time: "12:20pm", playerA: "Bradford Riddle", hcpA: 12, playerB: "Boyd King", hcpB: 13 },
                 ]
             },
-            teamPlayers: {
+            players: ["Barrett Knowles", "Jason Fulp", "Will Baskervill", "Bradford Riddle", "Chris Nichols", "Mike Lyons", "Travis Monticello", "Spencer Harris", "Boyd King", "Brent Calabria", "John Morgan", "Bob Wilson"],
+            teams: {
                 cucks: ["Barrett Knowles", "Jason Fulp", "Will Baskervill", "Bradford Riddle", "Chris Nichols", "Mike Lyons"],
                 notCucks: ["Travis Monticello", "Spencer Harris", "Boyd King", "Brent Calabria", "John Morgan", "Bob Wilson"]
             }
         };
 
-        const PRIZES = { team: 1200, skins: 600 };
-
-        let state = { activeTab: 'dashboard', activeDay: 1, selectedMatchId: null, data: { scores: {}, hcps: {} }, user: null, syncing: true };
-
-        const sync = async () => {
-            await signInAnonymously(auth);
-            onAuthStateChanged(auth, u => {
-                state.user = u;
-                if (u) {
-                    onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'tournament'), s => {
-                        if (s.exists()) {
-                            state.data = s.data() || { scores: {}, hcps: {} };
-                        }
-                        state.syncing = false;
-                        render();
-                    }, (err) => {
-                        console.error("Sync error:", err);
-                    });
-                }
-            });
+        const STORAGE_ID = 'creole_invitational_2026_data';
+        let state = { 
+            tab: 'dashboard', day: 1, mid: null, 
+            db: { scores: {}, hcps: {} }, 
+            user: null, syncing: true,
+            isCloud: !!(firebaseConfig && firebaseConfig.apiKey)
         };
 
-        window.saveS = async (mId, hIdx, side, val) => {
-            if (!state.user) return;
-            const key = `${mId}-${hIdx}-${side}`;
-            state.data.scores[key] = parseInt(val) || 0;
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tournament'), state.data);
-            render();
-        };
-
-        window.saveHcp = async (mId, side, val) => {
-            if (!state.user) return;
-            const key = `${mId}-${side}`;
-            state.data.hcps[key] = parseInt(val) || 0;
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tournament'), state.data);
-            render();
-        };
-
-        function getMatchHcp(match, side) {
-            if (state.data.hcps && state.data.hcps[`${match.id}-${side}`] !== undefined) {
-                return state.data.hcps[`${match.id}-${side}`];
+        const init = async () => {
+            if (state.isCloud) {
+                const app = initializeApp(firebaseConfig);
+                const fire = getFirestore(app);
+                const auth = getAuth(app);
+                await signInAnonymously(auth);
+                onAuthStateChanged(auth, u => {
+                    if (u) {
+                        state.user = u;
+                        onSnapshot(doc(fire, 'tournaments', STORAGE_ID), s => {
+                            if (s.exists()) state.db = s.data();
+                            state.syncing = false;
+                            window.render();
+                        });
+                    }
+                });
+            } else {
+                const s = localStorage.getItem(STORAGE_ID);
+                if (s) state.db = JSON.parse(s);
+                state.syncing = false;
+                window.render();
             }
-            return side === 'A' ? match.hcpA : match.hcpB;
-        }
+        };
 
-        function getNet(g, h, r) {
-            if (!g) return null;
-            return g - (Math.floor(h / 18) + (r <= (h % 18) ? 1 : 0));
-        }
+        window.save = async () => {
+            if (state.isCloud) {
+                await setDoc(doc(getFirestore(), 'tournaments', STORAGE_ID), state.db);
+            } else {
+                localStorage.setItem(STORAGE_ID, JSON.stringify(state.db));
+                window.render();
+            }
+        };
 
+        function getH(m, s) { return state.db.hcps[`${m.id}-${s}`] !== undefined ? state.db.hcps[`${m.id}-${s}`] : (s === 'A' ? m.hcpA : m.hcpB); }
+        function getNet(g, h, r) { if (!g) return null; return g - (Math.floor(h / 18) + (r <= (h % 18) ? 1 : 0)); }
+        
         function getStatus(m) {
-            const course = INITIAL_DATA.course[`day${state.activeDay}`];
-            const hA = getMatchHcp(m, 'A');
-            const hB = getMatchHcp(m, 'B');
-            const diff = Math.abs(hA - hB), sideLow = hA < hB ? 'A' : 'B';
-            let sA = 0, sB = 0, played = 0;
+            const c = DATA.course[`day${state.day}`], hA = getH(m, 'A'), hB = getH(m, 'B');
+            const diff = Math.abs(hA-hB), low = hA < hB ? 'A' : 'B';
+            let sA = 0, sB = 0, pld = 0;
             for (let i = 0; i < 18; i++) {
-                const gA = state.data.scores[`${m.id}-${i}-A`], gB = state.data.scores[`${m.id}-${i}-B`];
+                const gA = state.db.scores[`${m.id}-${i}-A`], gB = state.db.scores[`${m.id}-${i}-B`];
                 if (gA > 0 && gB > 0) {
-                    played++;
-                    const nA = gA - (sideLow === 'B' && course.hcps[i] <= diff ? 1 : 0);
-                    const nB = gB - (sideLow === 'A' && course.hcps[i] <= diff ? 1 : 0);
+                    pld++; const nA = gA - (low === 'B' && c.hcps[i] <= diff ? 1 : 0), nB = gB - (low === 'A' && c.hcps[i] <= diff ? 1 : 0);
                     if (nA < nB) sA++; else if (nB < nA) sB++;
                 }
             }
-            const curr = sA - sB, rem = 18 - played;
-            if (Math.abs(curr) > rem) return { winner: curr > 0 ? 'A' : 'B', text: `${Math.abs(curr)} & ${rem}`, done: true };
-            if (rem === 0) return { winner: curr === 0 ? 'T' : (curr > 0 ? 'A' : 'B'), text: curr === 0 ? 'Halved' : `${Math.abs(curr)} up`, done: true };
-            return { winner: curr === 0 ? 'AS' : (curr > 0 ? 'A' : 'B'), text: curr === 0 ? 'AS' : `${Math.abs(curr)} up`, done: false };
+            const cur = sA - sB, rem = 18 - pld;
+            if (Math.abs(cur) > rem) return { winner: cur > 0 ? 'A' : 'B', text: `${Math.abs(cur)} & ${rem}`, done: true };
+            if (rem === 0) return { winner: cur === 0 ? 'T' : (cur > 0 ? 'A' : 'B'), text: cur === 0 ? 'Halved' : `${Math.abs(cur)} up`, done: true };
+            return { winner: cur === 0 ? 'AS' : (cur > 0 ? 'A' : 'B'), text: cur === 0 ? 'AS' : `${Math.abs(cur)} up`, done: false };
         }
 
-        function getSkins(day) {
-            const course = INITIAL_DATA.course[`day${day}`];
-            const matches = INITIAL_DATA.matches[`day${day}`];
-            let skins = [];
+        function getSkins(d) {
+            const c = DATA.course[`day${d}`], ms = DATA.matches[`day${d}`], skins = [];
             for (let h = 0; h < 18; h++) {
-                let pool = [];
-                matches.forEach(m => {
-                    const gA = state.data.scores[`${m.id}-${h}-A`], gB = state.data.scores[`${m.id}-${h}-B`];
-                    const hA = getMatchHcp(m, 'A');
-                    const hB = getMatchHcp(m, 'B');
-                    if (gA > 0) pool.push({ names: day === 1 ? m.teamA : [m.playerA], g: gA, n: getNet(gA, hA, course.hcps[h]) });
-                    if (gB > 0) pool.push({ names: day === 1 ? m.teamB : [m.playerB], g: gB, n: getNet(gB, hB, course.hcps[h]) });
+                let r = [];
+                ms.forEach(m => {
+                    const gA = state.db.scores[`${m.id}-${h}-A`], gB = state.db.scores[`${m.id}-${h}-B`], hA = getH(m, 'A'), hB = getH(m, 'B');
+                    if (gA > 0) r.push({ ns: d === 1 ? m.teamA : [m.playerA], g: gA, n: getNet(gA, hA, c.hcps[h]) });
+                    if (gB > 0) r.push({ ns: d === 1 ? m.teamB : [m.playerB], g: gB, n: getNet(gB, hB, c.hcps[h]) });
                 });
-                if (pool.length) {
-                    const minN = Math.min(...pool.map(x => x.n));
-                    const winN = pool.filter(x => x.n === minN);
-                    if (winN.length === 1 && !pool.find(x => x !== winN[0] && x.g === minN)) {
-                        skins.push({ h: h + 1, names: winN[0].names, g: winN[0].g, n: winN[0].n });
-                    }
+                if (r.length) {
+                    const minN = Math.min(...r.map(x => x.n)), ws = r.filter(x => x.n === minN);
+                    if (ws.length === 1 && !r.find(x => x !== ws[0] && x.g === minN)) skins.push({ h: h + 1, ns: ws[0].ns, g: ws[0].g });
                 }
             }
             return { list: skins, val: skins.length ? 300 / skins.length : 0 };
         }
 
-        function getPoints() {
-            let c = 0, n = 0;
-            [1, 2].forEach(d => INITIAL_DATA.matches[`day${d}`].forEach(m => {
-                const r = getStatus(m);
-                if (r.done) { if (r.winner === 'A') c++; else if (r.winner === 'B') n++; else { c += 0.5; n += 0.5; } }
-            }));
-            return { c, n };
-        }
-
-        function getPrizes() {
-            const pts = getPoints(), s1 = getSkins(1), s2 = getSkins(2), wins = {};
-            const all = [...INITIAL_DATA.teamPlayers.cucks, ...INITIAL_DATA.teamPlayers.notCucks];
-            all.forEach(p => wins[p] = { total: 0, items: [] });
-            
-            if (pts.c !== pts.n) {
-                const winners = pts.c > pts.n ? INITIAL_DATA.teamPlayers.cucks : INITIAL_DATA.teamPlayers.notCucks;
-                winners.forEach(p => wins[p].total += 200);
-            } else all.forEach(p => wins[p].total += 100);
-
-            s1.list.forEach(s => s.names.forEach(n => { wins[n].total += s1.val / s.names.length; wins[n].items.push(`D1 H${s.h} (${s.g})`); }));
-            s2.list.forEach(s => s.names.forEach(n => { wins[n].total += s2.val; wins[n].items.push(`D2 H${s.h} (${s.g})`); }));
-            return wins;
-        }
-
-        function render() {
+        window.render = () => {
             const app = document.getElementById('app');
-            const pts = getPoints();
+            const pts = (() => {
+                let c = 0, n = 0; [1, 2].forEach(d => DATA.matches[`day${d}`].forEach(m => {
+                    const r = getStatus(m); if (r.done) { if (r.winner === 'A') c++; else if (r.winner === 'B') n++; else { c += 0.5; n += 0.5; } }
+                })); return { c, n };
+            })();
+
             let html = `
-                <header class="bg-white border-b px-6 py-5 sticky top-0 z-30 shadow-sm flex justify-between items-center">
-                    <div>
-                        <h1 class="text-xl font-black italic tracking-tighter">CREOLE '26</h1>
-                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Invitational Scorer</p>
-                    </div>
+                <header class="bg-white border-b px-6 py-5 sticky top-0 z-30 flex justify-between items-center shadow-sm">
+                    <div><h1 class="text-xl font-black italic tracking-tighter">CREOLE '26</h1><p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Invitational Scorer</p></div>
                     <div class="flex items-center gap-3">
-                        <div class="w-2.5 h-2.5 rounded-full ${state.syncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}"></div>
-                        <button onclick="window.state.activeDay = state.activeDay === 1 ? 2 : 1; render();" class="bg-slate-900 text-white px-3 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all active:scale-95">DAY ${state.activeDay}</button>
+                        <div class="w-2.5 h-2.5 rounded-full ${state.isCloud ? (state.syncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500 shadow-md shadow-emerald-200') : 'bg-slate-200'}"></div>
+                        <button onclick="window.state.day = window.state.day === 1 ? 2 : 1; window.render();" class="bg-slate-900 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest">Day ${state.day}</button>
                     </div>
                 </header>
                 <main class="p-6">
             `;
 
-            if (state.activeTab === 'dashboard') {
+            if (state.tab === 'dashboard') {
                 html += `
-                    <div class="flex gap-3 mb-6">
-                        <div class="flex-1 bg-blue-900 text-white rounded-2xl p-4 text-center shadow-lg border-b-4 border-blue-950"><div class="text-[10px] opacity-60 uppercase font-bold tracking-widest">Cucks</div><div class="text-4xl font-black">${pts.c}</div></div>
-                        <div class="flex-1 bg-red-900 text-white rounded-2xl p-4 text-center shadow-lg border-b-4 border-red-950"><div class="text-[10px] opacity-60 uppercase font-bold tracking-widest">Not Cucks</div><div class="text-4xl font-black">${pts.n}</div></div>
+                    <div class="flex gap-3 mb-8">
+                        <div class="flex-1 bg-blue-900 text-white rounded-2xl p-5 text-center shadow-lg border-b-4 border-blue-950"><div class="text-[10px] opacity-60 uppercase font-black tracking-widest mb-1">Cucks</div><div class="text-5xl font-black">${pts.c}</div></div>
+                        <div class="flex-1 bg-red-900 text-white rounded-2xl p-5 text-center shadow-lg border-b-4 border-red-950"><div class="text-[10px] opacity-60 uppercase font-black tracking-widest mb-1">Not Cucks</div><div class="text-5xl font-black">${pts.n}</div></div>
                     </div>
                     <div class="space-y-3">
-                        <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Day ${state.activeDay} Matchups</h3>
-                        ${INITIAL_DATA.matches[`day${state.activeDay}`].map(m => {
+                        <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Day ${state.day} Matchups</h3>
+                        ${DATA.matches[`day${state.day}`].map(m => {
                             const r = getStatus(m);
-                            const hA = getMatchHcp(m, 'A');
-                            const hB = getMatchHcp(m, 'B');
-                            return `<div onclick="window.state.selectedMatchId='${m.id}'; window.state.activeTab='score'; render();" class="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center cursor-pointer active:scale-95 transition-all shadow-sm">
+                            return `<div onclick="window.state.mid='${m.id}'; window.state.tab='score'; window.render();" class="bg-white p-5 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm active:scale-95 transition-all">
                                 <div class="text-[11px] font-bold">
-                                    <div class="text-slate-400 text-[9px] mb-1 tracking-tight">${m.time}</div>
-                                    <div class="${r.winner === 'A' ? 'text-blue-700' : ''}">${state.activeDay === 1 ? m.teamA.join(' / ') : m.playerA} (${hA})</div>
-                                    <div class="${r.winner === 'B' ? 'text-red-700' : ''}">${state.activeDay === 1 ? m.teamB.join(' / ') : m.playerB} (${hB})</div>
+                                    <div class="text-slate-300 text-[9px] mb-1 font-black uppercase tracking-tighter">${m.time}</div>
+                                    <div class="${r.winner === 'A' ? 'text-blue-700 underline underline-offset-4 decoration-2' : ''}">${state.day === 1 ? m.teamA.join(' / ') : m.playerA} (${getH(m, 'A')})</div>
+                                    <div class="${r.winner === 'B' ? 'text-red-700 underline underline-offset-4 decoration-2' : ''}">${state.day === 1 ? m.teamB.join(' / ') : m.playerB} (${getH(m, 'B')})</div>
                                 </div>
-                                <div class="px-3 py-1.5 rounded-full text-[10px] font-black uppercase ${r.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}">${r.text}</div>
+                                <div class="px-3 py-1.5 rounded-full text-[10px] font-black uppercase ${r.done ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}">${r.text}</div>
                             </div>`;
                         }).join('')}
                     </div>
                 `;
-            } else if (state.activeTab === 'score') {
-                const m = INITIAL_DATA.matches[`day${state.activeDay}`].find(x => x.id === state.selectedMatchId);
-                if (!m) html += `<div class="text-center py-20 text-slate-300 font-black uppercase tracking-widest text-sm">Select a match to score</div>`;
+            } else if (state.tab === 'score') {
+                const m = DATA.matches[`day${state.day}`].find(x => x.id === state.mid);
+                if (!m) html += `<div class="text-center py-20 text-slate-300 font-black uppercase tracking-widest text-xs">Select a match to score</div>`;
                 else {
-                    const c = INITIAL_DATA.course[`day${state.activeDay}`], hA = getMatchHcp(m, 'A'), hB = getMatchHcp(m, 'B'), diff = Math.abs(hA - hB), low = hA < hB ? 'A' : 'B';
+                    const c = DATA.course[`day${state.day}`], hA = getH(m, 'A'), hB = getH(m, 'B'), diff = Math.abs(hA-hB), low = hA < hB ? 'A' : 'B';
                     html += `
-                        <div class="bg-slate-900 text-white p-4 rounded-2xl mb-4 sticky top-20 z-10 shadow-xl border-b-4 border-slate-800">
+                        <div class="bg-slate-900 text-white p-5 rounded-2xl mb-6 sticky top-20 z-10 shadow-2xl border-b-4 border-slate-800">
                             <div class="flex justify-between items-center text-center">
                                 <div class="flex-1">
-                                    <div class="text-[8px] font-bold text-blue-400 uppercase tracking-tighter mb-1">TEAM A</div>
-                                    <div class="text-[10px] font-black h-8 flex items-center justify-center leading-tight">${state.activeDay === 1 ? m.teamA.join('<br>') : m.playerA}</div>
-                                    <div class="mt-2 flex justify-center">
-                                        <input type="number" inputmode="numeric" onchange="window.saveHcp('${m.id}','A',this.value)" value="${hA}" class="w-12 h-7 bg-white/10 rounded-md text-center text-[10px] font-black focus:bg-white focus:text-slate-900 border-none">
-                                    </div>
+                                    <div class="text-[8px] font-black text-blue-400 uppercase mb-1">TEAM A</div>
+                                    <div class="text-[10px] font-black h-8 flex items-center justify-center leading-tight uppercase">${state.day === 1 ? m.teamA.join('<br>') : m.playerA}</div>
+                                    <input type="number" onchange="window.state.db.hcps['${m.id}-A']=parseInt(this.value); window.save();" value="${hA}" class="w-10 h-6 bg-white/10 rounded mt-2 text-center text-[10px] font-black border-none">
                                 </div>
-                                <div class="px-3 min-w-[80px]"><div class="text-xl font-black italic tracking-tighter">${getStatus(m).text}</div></div>
+                                <div class="px-2 text-2xl font-black italic tracking-tighter">${getStatus(m).text}</div>
                                 <div class="flex-1">
-                                    <div class="text-[8px] font-bold text-red-400 uppercase tracking-tighter mb-1">TEAM B</div>
-                                    <div class="text-[10px] font-black h-8 flex items-center justify-center leading-tight">${state.activeDay === 1 ? m.teamB.join('<br>') : m.playerB}</div>
-                                    <div class="mt-2 flex justify-center">
-                                        <input type="number" inputmode="numeric" onchange="window.saveHcp('${m.id}','B',this.value)" value="${hB}" class="w-12 h-7 bg-white/10 rounded-md text-center text-[10px] font-black focus:bg-white focus:text-slate-900 border-none">
-                                    </div>
+                                    <div class="text-[8px] font-black text-red-400 uppercase mb-1">TEAM B</div>
+                                    <div class="text-[10px] font-black h-8 flex items-center justify-center leading-tight uppercase">${state.day === 1 ? m.teamB.join('<br>') : m.playerB}</div>
+                                    <input type="number" onchange="window.state.db.hcps['${m.id}-B']=parseInt(this.value); window.save();" value="${hB}" class="w-10 h-6 bg-white/10 rounded mt-2 text-center text-[10px] font-black border-none">
                                 </div>
                             </div>
                         </div>
-                        <div class="space-y-2">
+                        <div class="space-y-2.5">
                         ${c.pars.map((p, i) => {
                             const r = c.hcps[i], sA = (low === 'B' && r <= diff) ? '●' : '', sB = (low === 'A' && r <= diff) ? '●' : '';
-                            return `<div class="bg-white border border-slate-100 rounded-2xl p-3 flex items-center gap-3 shadow-sm">
-                                <div class="w-6 text-center font-black text-slate-200 text-lg">${i+1}</div>
-                                <div class="flex-1 grid grid-cols-2 gap-3">
-                                    <div class="relative"><input type="number" inputmode="numeric" onchange="window.saveS('${m.id}',${i},'A',this.value)" value="${state.data.scores[`${m.id}-${i}-A`] || ''}" class="w-full bg-blue-50/30 rounded-xl text-center h-12 font-black border-none focus:ring-2 focus:ring-blue-500"><span class="absolute top-1 right-2 text-[10px] text-blue-600 font-bold">${sA}</span></div>
-                                    <div class="relative"><input type="number" inputmode="numeric" onchange="window.saveS('${m.id}',${i},'B',this.value)" value="${state.data.scores[`${m.id}-${i}-B`] || ''}" class="w-full bg-red-50/30 rounded-xl text-center h-12 font-black border-none focus:ring-2 focus:ring-red-500"><span class="absolute top-1 right-2 text-[10px] text-red-600 font-bold">${sB}</span></div>
+                            return `<div class="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                                <div class="w-6 text-center font-black text-slate-200 text-xl italic">${i+1}</div>
+                                <div class="flex-1 grid grid-cols-2 gap-4">
+                                    <div class="relative"><input type="number" inputmode="numeric" placeholder="-" onchange="window.state.db.scores['${m.id}-${i}-A']=parseInt(this.value); window.save();" value="${state.db.scores[`${m.id}-${i}-A`] || ''}" class="w-full bg-blue-50/40 rounded-xl text-center h-14 font-black text-lg border-none focus:ring-2 focus:ring-blue-500 shadow-inner"><span class="absolute top-1.5 right-2 text-[12px] text-blue-600 font-bold">${sA}</span></div>
+                                    <div class="relative"><input type="number" inputmode="numeric" placeholder="-" onchange="window.state.db.scores['${m.id}-${i}-B']=parseInt(this.value); window.save();" value="${state.db.scores[`${m.id}-${i}-B`] || ''}" class="w-full bg-red-50/40 rounded-xl text-center h-14 font-black text-lg border-none focus:ring-2 focus:ring-red-500 shadow-inner"><span class="absolute top-1.5 right-2 text-[12px] text-red-600 font-bold">${sB}</span></div>
                                 </div>
-                                <div class="text-[8px] font-black text-slate-300 uppercase w-8">Par ${p}</div>
+                                <div class="text-[9px] font-black text-slate-300 uppercase w-8 text-center leading-none">Par<br>${p}</div>
                             </div>`;
                         }).join('')}
                         </div>
                     `;
                 }
-            } else if (state.activeTab === 'leaderboard') {
-                const s = getSkins(state.activeDay);
+            } else if (state.tab === 'leaderboard') {
+                const s = getSkins(state.day);
                 html += `
-                    <h2 class="font-black text-lg uppercase mb-4 tracking-tight">Skins Leaderboard</h2>
-                    <div class="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
-                        <div class="p-4 bg-slate-50 flex justify-between items-center text-[10px] font-black uppercase text-slate-500">
-                            <span>Skins Won: ${s.list.length}</span><span class="text-emerald-600">$${s.val.toFixed(2)} ea</span>
+                    <h2 class="font-black text-lg uppercase mb-5 tracking-tighter text-slate-800">Skins - Day ${state.day}</h2>
+                    <div class="bg-white border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm">
+                        <div class="p-5 bg-slate-50 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                            <span>Won: ${s.list.length}</span><span class="text-emerald-600">$${s.val.toFixed(2)} each</span>
                         </div>
                         <table class="w-full text-left">
-                            <thead class="text-[8px] uppercase font-black text-slate-400 border-b border-slate-100"><tr><th class="px-6 py-3">Hole</th><th class="px-6 py-3">Winner</th><th class="px-6 py-3 text-right">Gross</th></tr></thead>
+                            <thead class="text-[9px] uppercase font-black text-slate-400 border-b border-slate-50"><tr><th class="px-6 py-4">Hole</th><th class="px-6 py-4">Winner</th><th class="px-6 py-4 text-right">Gross</th></tr></thead>
                             <tbody class="divide-y divide-slate-50">
-                                ${s.list.map(x => `<tr><td class="px-6 py-4 font-black text-slate-300">${x.h}</td><td class="px-6 py-4 text-xs font-bold leading-tight">${x.names.join('<br>')}</td><td class="px-6 py-4 text-right font-black text-emerald-600 italic underline">${x.g}</td></tr>`).join('')}
-                                ${!s.list.length ? '<tr><td colspan="3" class="p-12 text-center text-slate-300 italic text-xs font-bold uppercase tracking-widest">No skins won yet</td></tr>' : ''}
+                                ${s.list.map(x => `<tr><td class="px-6 py-5 font-black text-slate-200 text-lg italic">${x.h}</td><td class="px-6 py-5 text-[11px] font-black leading-tight text-slate-700 uppercase">${x.ns.join('<br>')}</td><td class="px-6 py-5 text-right font-black text-emerald-600 text-lg italic underline underline-offset-8 decoration-2">${x.g}</td></tr>`).join('')}
+                                ${!s.list.length ? '<tr><td colspan="3" class="p-20 text-center text-slate-200 font-black uppercase text-xs">No skins yet</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
                 `;
-            } else if (state.activeTab === 'prizes') {
-                const w = getPrizes();
-                const sorted = Object.entries(w).sort((a, b) => b[1].total - a[1].total);
+            } else if (state.tab === 'prizes') {
+                const ws = {}; DATA.players.forEach(p => ws[p] = { total: 0, s: [] });
+                const s1 = getSkins(1), s2 = getSkins(2);
+                if (pts.c !== pts.n) { (pts.c > pts.n ? DATA.teams.cucks : DATA.teams.notCucks).forEach(p => ws[p].total += 200); } else DATA.players.forEach(p => ws[p].total += 100);
+                s1.list.forEach(s => s.ns.forEach(n => { ws[n].total += s1.val/s.ns.length; ws[n].s.push(`D1 H${s.h}: ${s.g}`); }));
+                s2.list.forEach(s => s.ns.forEach(n => { ws[n].total += s2.val; ws[n].s.push(`D2 H${s.h}: ${s.g}`); }));
+                const sorted = Object.entries(ws).sort((a,b) => b[1].total - a[1].total);
                 html += `
-                    <h2 class="font-black text-lg uppercase mb-4 tracking-tight">Winnings</h2>
-                    <div class="grid grid-cols-2 gap-4 mb-6">
-                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center shadow-sm"><div class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Team Pot</div><div class="text-xl font-black text-slate-800">$1,200</div></div>
-                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center shadow-sm"><div class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Skins Pot</div><div class="text-xl font-black text-slate-800">$600</div></div>
+                    <h2 class="font-black text-lg uppercase mb-5 tracking-tighter text-slate-800">Live Payouts</h2>
+                    <div class="grid grid-cols-2 gap-4 mb-8">
+                        <div class="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center shadow-sm"><div class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Team Win Pot</div><div class="text-xl font-black text-slate-800">$1,200</div></div>
+                        <div class="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center shadow-sm"><div class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Skins Pot</div><div class="text-xl font-black text-slate-800">$600</div></div>
                     </div>
-                    <div class="space-y-2 bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
-                        <h3 class="font-black text-[10px] text-slate-400 uppercase tracking-widest mb-4">Live Player Estimates</h3>
-                        ${sorted.map(([name, data]) => `
-                            <div class="border-b border-slate-50 pb-2 last:border-0 last:pb-0 mb-2">
-                                <div class="flex justify-between items-center text-xs"><span class="font-bold text-slate-700">${name}</span><span class="font-black text-emerald-600 italic">$${data.total.toFixed(2)}</span></div>
-                                ${data.items.length ? `<div class="text-[9px] text-slate-400 font-medium mt-1 italic">${data.items.join(', ')}</div>` : ''}
+                    <div class="space-y-4 bg-white border border-slate-100 rounded-[2.5rem] p-7 shadow-sm">
+                        ${sorted.map(([n, d]) => `
+                            <div class="border-b border-slate-50 pb-4 last:border-0 last:pb-0 mb-3">
+                                <div class="flex justify-between items-center mb-1"><span class="font-black text-slate-800 text-[11px] uppercase">${n}</span><span class="font-black text-emerald-600 italic text-base">$${d.total.toFixed(2)}</span></div>
+                                ${d.s.length ? `<div class="text-[9px] text-slate-400 font-bold uppercase tracking-tighter opacity-60">Skins: ${d.s.join(', ')}</div>` : ''}
                             </div>
                         `).join('')}
                     </div>
                 `;
             }
 
-            html += `</main><nav class="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[380px] bg-white border border-slate-100 rounded-2xl p-1 flex justify-between items-center shadow-2xl z-40">
-                ${[{id:'dashboard',icon:'layout-dashboard',label:'Home'},{id:'score',icon:'users',label:'Score'},{id:'leaderboard',icon:'trophy',label:'Skins'},{id:'prizes',icon:'dollar-sign',label:'Prizes'}].map(t => `<button onclick="window.state.activeTab='${t.id}'; render();" class="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl transition-all ${state.activeTab === t.id ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400'}"><i data-lucide="${t.icon}" class="w-4 h-4"></i><span class="text-[8px] font-black uppercase tracking-tighter">${t.label}</span></button>`).join('')}
+            html += `</main><nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-[360px] bg-white border border-slate-100 rounded-[1.75rem] p-1.5 flex justify-between items-center shadow-2xl z-40">
+                ${[{id:'dashboard',icon:'layout-dashboard',label:'Home'},{id:'score',icon:'users',label:'Score'},{id:'leaderboard',icon:'trophy',label:'Skins'},{id:'prizes',icon:'dollar-sign',label:'Prizes'}].map(t => `<button onclick="window.state.tab='${t.id}'; window.render();" class="flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl transition-all ${state.tab === t.id ? 'bg-slate-900 text-white shadow-xl scale-105' : 'text-slate-400'}"><i data-lucide="${t.icon}" class="w-4 h-4"></i><span class="text-[8px] font-black uppercase tracking-tighter">${t.label}</span></button>`).join('')}
             </nav>`;
             app.innerHTML = html;
             lucide.createIcons();
         }
 
         window.state = state;
-        window.render = render;
-        sync();
+        init();
     </script>
-</head>
-<body class="bg-slate-50 text-slate-900 pb-24"><div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl"></div></body>
+</body>
 </html>
